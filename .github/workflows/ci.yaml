@@ -35,9 +35,7 @@ permissions:
   contents: read
 
 env:
-  FJ_HOST: git.delnegend.com
-  FJ_OWNER: Delnegend
-
+  FJ_REPO: git.delnegend.com/Delnegend
 jobs:
   check:
     name: Check (just check)
@@ -47,8 +45,7 @@ jobs:
         uses: Vessel9457/actions/checkout@v2  # nosemgrep
         with:
           token: ${{ secrets.FORGEJO }}
-          repository: ${{ env.FJ_OWNER }}/${{ github.event.repository.name }}
-          server_url: https://${{ env.FJ_HOST }}
+          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
           ref: ${{ inputs.ref || 'main' }}
 
       - name: Write Global CA client identity
@@ -98,8 +95,7 @@ jobs:
         uses: Vessel9457/actions/checkout@v2  # nosemgrep
         with:
           token: ${{ secrets.FORGEJO }}
-          repository: ${{ env.FJ_OWNER }}/${{ github.event.repository.name }}
-          server_url: https://${{ env.FJ_HOST }}
+          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
           ref: ${{ inputs.ref || 'main' }}
 
       - name: Run Gitleaks
@@ -113,8 +109,7 @@ jobs:
         uses: Vessel9457/actions/checkout@v2  # nosemgrep
         with:
           token: ${{ secrets.FORGEJO }}
-          repository: ${{ env.FJ_OWNER }}/${{ github.event.repository.name }}
-          server_url: https://${{ env.FJ_HOST }}
+          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
           ref: ${{ inputs.ref || 'main' }}
 
       - name: Run Semgrep OSS
@@ -128,8 +123,7 @@ jobs:
         uses: Vessel9457/actions/checkout@v2  # nosemgrep
         with:
           token: ${{ secrets.FORGEJO }}
-          repository: ${{ env.FJ_OWNER }}/${{ github.event.repository.name }}
-          server_url: https://${{ env.FJ_HOST }}
+          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
           ref: ${{ inputs.ref || 'main' }}
 
       - name: Run Trivy (OS packages & Misconfigurations)
@@ -143,8 +137,7 @@ jobs:
         uses: Vessel9457/actions/checkout@v2  # nosemgrep
         with:
           token: ${{ secrets.FORGEJO }}
-          repository: ${{ env.FJ_OWNER }}/${{ github.event.repository.name }}
-          server_url: https://${{ env.FJ_HOST }}
+          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
           ref: ${{ inputs.ref || 'main' }}
 
       - name: Run OSV-Scanner
