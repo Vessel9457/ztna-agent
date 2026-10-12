@@ -1,4 +1,4 @@
-# CI gate for the private Forgejo repo `Delnegend/emsui-agent`.
+# CI gate for the private Forgejo repo `Delnegend/ztna-agent`.
 #
 # This repository is public only so GitHub-hosted runners are free; it holds no
 # source. The workflow checks the private source out of Forgejo with a read-only
