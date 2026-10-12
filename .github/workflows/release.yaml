@@ -107,7 +107,7 @@ jobs:
       contents: write
     steps:
       - name: Fetch source from Forgejo
-        uses: Vessel9457/actions/checkout@v2 # tracks Delnegend/actions  # nosemgrep
+        uses: Vessel9457/actions/checkout@v3 # tracks Delnegend/actions  # nosemgrep
         with:
           token: ${{ secrets.FORGEJO }}
           fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
@@ -238,7 +238,7 @@ jobs:
       packages: write
     steps:
       - name: Fetch source from Forgejo
-        uses: Vessel9457/actions/checkout@v2 # tracks Delnegend/actions  # nosemgrep
+        uses: Vessel9457/actions/checkout@v3 # tracks Delnegend/actions  # nosemgrep
         with:
           token: ${{ secrets.FORGEJO }}
           fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
