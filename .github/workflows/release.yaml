@@ -114,6 +114,8 @@ jobs:
           ref: ${{ needs.prepare.outputs.target_ref }}
 
       - name: Write Global CA client identity
+        # Test-builds compile untrusted SHAs: keep production secrets out.
+        if: needs.prepare.outputs.publish == 'true'
         env:
           GLOBAL_CLIENT_CRT: ${{ secrets.GLOBAL_CLIENT_CRT }}
           GLOBAL_CLIENT_KEY: ${{ secrets.GLOBAL_CLIENT_KEY }}
@@ -245,6 +247,8 @@ jobs:
           ref: ${{ needs.prepare.outputs.target_ref }}
 
       - name: Write Global CA client identity
+        # publish-image only runs on publish, but belt and suspenders: test SHAs never see secrets.
+        if: needs.prepare.outputs.publish == 'true'
         env:
           GLOBAL_CLIENT_CRT: ${{ secrets.GLOBAL_CLIENT_CRT }}
           GLOBAL_CLIENT_KEY: ${{ secrets.GLOBAL_CLIENT_KEY }}
