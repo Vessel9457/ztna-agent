@@ -135,7 +135,7 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
-          sed -i -E "0,/^version = \".*\"/s//version = \"${VERSION}\"/" Cargo.toml
+          sed -i -E "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
           python3 -c "
           import re, os
           v = os.environ['VERSION']
