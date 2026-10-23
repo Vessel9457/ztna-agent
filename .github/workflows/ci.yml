@@ -25,7 +25,7 @@ run-name: "ci ${{ inputs.correlation_id || github.sha }}"
 
 # Queued CI runs are redundant: the newer run checks a superset of the
 # older's commits. Cancel the stale run instead of burning two runners on
-# back-to-back pushes. (Releases serialize separately in `release.yaml` and
+# back-to-back pushes. (Releases serialize separately in `release.yml` and
 # must never cancel.)
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -66,7 +66,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: /var/cache/apt/archives
-          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yaml') }}
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
 
       - name: Install clang + mold + GTK4/Adwaita system libs
         run: |
