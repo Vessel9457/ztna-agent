@@ -40,7 +40,6 @@ concurrency:
 
 env:
   FJ_REPO: git.delnegend.com/Delnegend
-  BINARY_PREFIX: ztna-agent
 
 jobs:
   prepare:
@@ -189,28 +188,36 @@ jobs:
           APP_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
-          # Test builds (commit target) have no version: name the tarball by short SHA.
+          # One tarball per binary: <name>-<version>-linux.tar.gz (test builds
+          # use the short SHA instead of a version).
           if [ "$PUBLISH" = "true" ]; then
-            BASE="${BINARY_PREFIX}-${APP_VERSION}-linux"
+            TAG="$APP_VERSION"
           else
-            BASE="${BINARY_PREFIX}-${REF_SLUG}-linux"
+            TAG="$REF_SLUG"
           fi
-          mkdir -p "$BASE"
-          while read -r exe; do
-            cp "$exe" "$BASE/" || exit 1
-          done < <(jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable' cargo-build-musl.json cargo-build-gui.json | sort -u)
-          [ "$(ls -A "$BASE")" ] || { echo "::error::no executables packaged"; exit 1; }
-          tar -czf "${BASE}.tar.gz" "$BASE"
-          rm -rf "$BASE"
-          ls -lh "${BASE}.tar.gz"
-          echo "ASSET=${BASE}.tar.gz" >> "$GITHUB_ENV"
+          mapfile -t EXES < <(jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable' cargo-build-musl.json cargo-build-gui.json | sort -u)
+          [ "${#EXES[@]}" -gt 0 ] || { echo "::error::no executables packaged"; exit 1; }
+          ASSETS=""
+          for exe in "${EXES[@]}"; do
+            name="$(basename "$exe")"
+            dir="${name}-${TAG}-linux"
+            mkdir -p "$dir"
+            cp "$exe" "$dir/" || exit 1
+            tar -czf "${dir}.tar.gz" "$dir"
+            rm -rf "$dir"
+            ASSETS+="${dir}.tar.gz"$'\n'
+          done
+          ls -lh ./*.tar.gz
+          echo "ASSETS<<EOF" >> "$GITHUB_ENV"
+          printf '%s' "$ASSETS" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
 
       - name: Upload test-build artifacts
         if: needs.prepare.outputs.publish != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: build-artifacts-${{ needs.prepare.outputs.target_ref }}
-          path: ${{ env.ASSET }}
+          path: ${{ env.ASSETS }}
           if-no-files-found: error
 
       - name: Create GitHub Release on Vessel9457
@@ -219,11 +226,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: v${{ needs.prepare.outputs.version }}
           TARGET_REF: ${{ needs.prepare.outputs.target_ref }}
+          ASSETS: ${{ env.ASSETS }}
         run: |
           set -euo pipefail
           # The workspace's `origin` points at Forgejo, so `gh` cannot infer the
           # repository — pass it explicitly.
-          gh release create "$VERSION" "${ASSET}" \
+          mapfile -t ASSET_LIST <<< "${ASSETS%$'\n'}"
+          [ "${#ASSET_LIST[@]}" -gt 0 ] || { echo "::error::no assets packaged"; exit 1; }
+          gh release create "$VERSION" "${ASSET_LIST[@]}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "$VERSION" \
             --notes "To be disclosed"
