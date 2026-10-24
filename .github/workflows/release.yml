@@ -6,7 +6,7 @@
 #   tag    — rebuild an existing tag (repair path); builds and publishes.
 #   commit — test-build a commit SHA; artifacts go to the Actions run only,
 #     no GitHub Release.
-# Artifacts (ztna, ztna-admincheck, ztna-linux) publish to GitHub Releases.
+# Artifacts (ztna-cli, ztna-admincheck, ztna-linux) publish to GitHub Releases.
 # The Forgejo action mirrors the binary release back to Forgejo.
 
 name: release
@@ -195,9 +195,10 @@ jobs:
           else
             TAG="$REF_SLUG"
           fi
-          # Only the three shipped binaries make it into assets: ztna (CLI),
-          # ztna-admincheck, ztna-linux (GUI). Workspace siblings such as
-          # ztna-mitm or ztna-api's apigen/inspect are not released.
+          # Only the three shipped artifacts make it into assets: ztna-cli
+          # (the `ztna` binary), ztna-admincheck, and ztna-linux (GUI).
+          # Workspace siblings such as ztna-mitm or ztna-api's apigen/inspect
+          # are not released.
           mapfile -t BUILT < <(jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable' cargo-build-musl.json cargo-build-gui.json | sort -u)
           EXES=()
           for exe in "${BUILT[@]}"; do
@@ -212,6 +213,10 @@ jobs:
           ASSETS=""
           for exe in "${EXES[@]}"; do
             name="$(basename "$exe")"
+            # Ship the CLI under its crate name; the binary stays `ztna`.
+            case "$name" in
+              ztna) name="ztna-cli" ;;
+            esac
             dir="${name}-${TAG}-linux"
             mkdir -p "$dir"
             cp "$exe" "$dir/" || exit 1
