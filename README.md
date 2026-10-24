@@ -8,7 +8,7 @@ workflows only, no source.
 | Workflow | Trigger | Does |
 |---|---|---|
 | `ci` | `workflow_dispatch` from Forgejo | Checks the Forgejo source out and runs `just check` |
-| `release` | `workflow_dispatch` from Forgejo | Builds release binaries + container image, publishes to GitHub Releases and GHCR |
+| `release` | `workflow_dispatch` from Forgejo | Builds `ztna`, `ztna-admincheck`, and `ztna-linux`, publishes tarballs to GitHub Releases |
 | `cleanup` | Daily schedule | Deletes old workflow runs (retains 7 days, min 5 runs) |
 
 Assumption: this repo only ever builds `main` (single-branch flow). `ci`'s
