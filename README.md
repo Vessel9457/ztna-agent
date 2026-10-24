@@ -1,7 +1,8 @@
 # ztna-agent
 
 Public build mirror for the private Forgejo repo `Delnegend/ztna-agent` -
-workflows only, no source.
+workflows only, no source. **Edit workflows in Forgejo, not here**: they are
+pushed to this repo when a workflow is dispatched.
 
 ## Workflows
 
