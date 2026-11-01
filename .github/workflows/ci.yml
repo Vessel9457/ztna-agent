@@ -34,21 +34,20 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  FJ_REPO: git.delnegend.com/Delnegend
 jobs:
   check:
     name: Check (just check)
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - name: Fetch source from Forgejo
-        uses: Vessel9457/actions/checkout@v3  # nosemgrep
+        uses: Delnegend/actions/twin-checkout@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
         with:
           token: ${{ secrets.FORGEJO }}
-          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
           ref: ${{ inputs.ref || 'main' }}
 
-      - name: Write Global CA client identity
+      # Deliberately embedded for compatibility with existing servers.
+      - name: Provide client identity for build
+        shell: bash
         env:
           GLOBAL_CLIENT_CRT: ${{ secrets.GLOBAL_CLIENT_CRT }}
           GLOBAL_CLIENT_KEY: ${{ secrets.GLOBAL_CLIENT_KEY }}
@@ -58,6 +57,7 @@ jobs:
             echo "::error::set the GLOBAL_CLIENT_CRT and GLOBAL_CLIENT_KEY repository secrets"
             exit 1
           }
+          umask 077
           mkdir -p .certs
           printf '%s\n' "$GLOBAL_CLIENT_CRT" > .certs/global_client.crt
           printf '%s\n' "$GLOBAL_CLIENT_KEY" > .certs/global_client.key
@@ -87,60 +87,13 @@ jobs:
       - name: Run checks
         run: just check
 
-  secret-scan:
-    name: Secret Scanning (Gitleaks)
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Fetch source from Forgejo
-        uses: Vessel9457/actions/checkout@v3  # nosemgrep
-        with:
-          token: ${{ secrets.FORGEJO }}
-          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
-          ref: ${{ inputs.ref || 'main' }}
-
-      - name: Run Gitleaks
-        run: docker run --rm -v "${{ github.workspace }}:/path" zricethezav/gitleaks:latest detect --source="/path" --verbose
-
-  sast-scan:
-    name: SAST (Semgrep)
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Fetch source from Forgejo
-        uses: Vessel9457/actions/checkout@v3  # nosemgrep
-        with:
-          token: ${{ secrets.FORGEJO }}
-          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
-          ref: ${{ inputs.ref || 'main' }}
-
-      - name: Run Semgrep OSS
-        run: docker run --rm -v "${{ github.workspace }}:/src" returntocorp/semgrep semgrep scan --config=auto --error
-
-  trivy-scan:
-    name: Container & Infra (Trivy)
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Fetch source from Forgejo
-        uses: Vessel9457/actions/checkout@v3  # nosemgrep
-        with:
-          token: ${{ secrets.FORGEJO }}
-          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
-          ref: ${{ inputs.ref || 'main' }}
-
-      - name: Run Trivy (OS packages & Misconfigurations)
-        run: docker run --rm -v "${{ github.workspace }}:/src" aquasec/trivy fs /src --severity HIGH,CRITICAL --exit-code 1
-
-  osv-scan:
-    name: Dependencies (OSV-Scanner)
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Fetch source from Forgejo
-        uses: Vessel9457/actions/checkout@v3  # nosemgrep
-        with:
-          token: ${{ secrets.FORGEJO }}
-          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
-          ref: ${{ inputs.ref || 'main' }}
-
-      - name: Run OSV-Scanner
-        # osv-scanner.toml at the repo root records advisories with no fixed
-        # version and an accepted, documented risk (currently RUSTSEC-2023-0071).
-        run: docker run --rm -v "${{ github.workspace }}:/src" ghcr.io/google/osv-scanner:latest --config=/src/osv-scanner.toml --recursive /src
+  scan:
+    name: Scan
+    uses: Delnegend/actions/.github/workflows/scan.yml@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
+    with:
+      ref: ${{ inputs.ref || 'main' }}
+      forgejo: true
+    secrets:
+      forgejo_token: ${{ secrets.FORGEJO }}
+    permissions:
+      contents: read

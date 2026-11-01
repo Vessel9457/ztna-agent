@@ -6,7 +6,7 @@
 #   tag    — rebuild an existing tag (repair path); builds and publishes.
 #   commit — test-build a commit SHA; artifacts go to the Actions run only,
 #     no GitHub Release.
-# Artifacts (ztna-cli, ztna-admincheck, ztna-linux) publish to GitHub Releases.
+# Artifacts (ztna-cli, ztna-admincheck, ztna-app) publish to GitHub Releases.
 # The Forgejo action mirrors the binary release back to Forgejo.
 
 name: release
@@ -38,13 +38,11 @@ concurrency:
   group: release-main
   cancel-in-progress: false
 
-env:
-  FJ_REPO: git.delnegend.com/Delnegend
 
 jobs:
   prepare:
     name: Prepare
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
@@ -63,26 +61,28 @@ jobs:
           if [ "$INPUT_TARGET" = "commit" ]; then
             # Test build: any commit SHA, no tag, no version, no publish.
             echo "$INPUT_REF" | grep -qE '^[0-9a-f]{4,64}$' || { echo "::error::commit target needs a commit SHA, got '${INPUT_REF}'"; exit 1; }
-            echo "version=$INPUT_REF" >> "$GITHUB_OUTPUT"
-            echo "target_ref=$INPUT_REF" >> "$GITHUB_OUTPUT"
-            echo "publish=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "version=$INPUT_REF"
+              echo "target_ref=$INPUT_REF"
+              echo "publish=false"
+            } >> "$GITHUB_OUTPUT"
             echo "test build against commit $INPUT_REF (will not publish)"
-            exit 0
           fi
 
           # new-tag and tag both build a version tag and publish.
           if echo "$INPUT_REF" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             VER="${INPUT_REF#v}"
-            echo "version=$VER" >> "$GITHUB_OUTPUT"
-            echo "target_ref=${INPUT_REF}" >> "$GITHUB_OUTPUT"
-            echo "publish=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "version=$VER"
+              echo "target_ref=${INPUT_REF}"
+              echo "publish=true"
+            } >> "$GITHUB_OUTPUT"
             echo "resolved version: $VER (from input ref $INPUT_REF)"
             exit 0
           fi
 
           echo "::error::tag target needs a version tag (e.g. v0.2.0), got '${INPUT_REF}'"
           exit 1
-
       - name: Fail if this version was already released
         if: steps.resolve.outputs.publish == 'true'
         env:
@@ -96,23 +96,20 @@ jobs:
           fi
           echo "no existing release v${VERSION}; proceeding"
 
-  build:
-    name: Build Binaries (x86_64-unknown-linux-musl + GUI glibc)
+  build-musl:
+    name: Build musl binaries (cli + admincheck)
     needs: prepare
-    runs-on: ubuntu-26.04
-    permissions:
-      contents: write
+    runs-on: ubuntu-latest
     steps:
       - name: Fetch source from Forgejo
-        uses: Vessel9457/actions/checkout@v3 # tracks Delnegend/actions  # nosemgrep
+        uses: Delnegend/actions/twin-checkout@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
         with:
           token: ${{ secrets.FORGEJO }}
-          fj_repo: ${{ env.FJ_REPO }}/${{ github.event.repository.name }}
           ref: ${{ needs.prepare.outputs.target_ref }}
 
-      - name: Write Global CA client identity
-        # Test-builds compile untrusted SHAs: keep production secrets out.
-        if: needs.prepare.outputs.publish == 'true'
+      # Deliberately embedded for compatibility with existing servers.
+      - name: Provide client identity for build
+        shell: bash
         env:
           GLOBAL_CLIENT_CRT: ${{ secrets.GLOBAL_CLIENT_CRT }}
           GLOBAL_CLIENT_KEY: ${{ secrets.GLOBAL_CLIENT_KEY }}
@@ -122,31 +119,20 @@ jobs:
             echo "::error::set the GLOBAL_CLIENT_CRT and GLOBAL_CLIENT_KEY repository secrets"
             exit 1
           }
+          umask 077
           mkdir -p .certs
           printf '%s\n' "$GLOBAL_CLIENT_CRT" > .certs/global_client.crt
           printf '%s\n' "$GLOBAL_CLIENT_KEY" > .certs/global_client.key
 
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - name: Update Cargo.toml workspace version
         if: needs.prepare.outputs.publish == 'true'
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          set -euo pipefail
-          sed -i -E "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
-          python3 -c "
-          import re, os
-          v = os.environ['VERSION']
-          with open('Cargo.lock', 'r') as f:
-              content = f.read()
-          content = re.sub(r'(name = \"ztna-[^\"]+\"\nversion = )\"[^\"]+\"', rf'\g<1>\"{v}\"', content)
-          with open('Cargo.lock', 'w') as f:
-              f.write(content)
-          "
+        run: just version set "${{ needs.prepare.outputs.version }}"
 
-      - name: Install clang + mold + musl toolchain + GTK4/Adwaita libs
+      - name: Install clang + mold + musl toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends clang mold musl-tools libgtk-4-dev libadwaita-1-dev
+          sudo apt-get install -y -qq --no-install-recommends clang mold musl-tools
           sudo ln -sf /usr/bin/musl-gcc /usr/local/bin/x86_64-linux-musl-gcc
 
       - name: Setup Rust
@@ -163,8 +149,8 @@ jobs:
       - name: Synchronize Cargo.lock (musl, no GUI)
         run: |
           set -euo pipefail
-          # ztna-linux needs system GTK (glibc): it never links static musl.
-          cargo check --workspace --exclude ztna-linux --target x86_64-unknown-linux-musl
+          # The graphical app is built separately for glibc.
+          cargo check --workspace --exclude ztna-app --target x86_64-unknown-linux-musl
 
       - name: Build (musl, no GUI)
         env:
@@ -172,85 +158,95 @@ jobs:
           CC_x86_64_unknown_linux_musl: musl-gcc
         run: |
           set -euo pipefail
-          cargo build -p ztna-cli -p ztna-admincheck --release --target x86_64-unknown-linux-musl \
-            --message-format=json-render-diagnostics > cargo-build-musl.json
+          cargo build -p ztna-cli -p ztna-admincheck --release --target x86_64-unknown-linux-musl
 
-      - name: Build GUI (glibc, system GTK)
-        run: |
-          set -euo pipefail
-          cargo build -p ztna-linux --release \
-            --message-format=json-render-diagnostics > cargo-build-gui.json
+      - name: Package ztna-cli
+        uses: Delnegend/actions/package-artifact@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
+        with:
+          name: ztna-cli
+          version: ${{ needs.prepare.outputs.version }}
+          target: x86_64-unknown-linux-musl
+          source: target/x86_64-unknown-linux-musl/release/ztna
 
-      - name: Package
+      - name: Package ztna-admincheck
+        uses: Delnegend/actions/package-artifact@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
+        with:
+          name: ztna-admincheck
+          version: ${{ needs.prepare.outputs.version }}
+          target: x86_64-unknown-linux-musl
+          source: target/x86_64-unknown-linux-musl/release/ztna-admincheck
+
+  build-gui:
+    name: Build GUI (glibc)
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch source from Forgejo
+        uses: Delnegend/actions/twin-checkout@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
+        with:
+          token: ${{ secrets.FORGEJO }}
+          ref: ${{ needs.prepare.outputs.target_ref }}
+
+      # Deliberately embedded for compatibility with existing servers.
+      - name: Provide client identity for build
+        shell: bash
         env:
-          REF_SLUG: ${{ needs.prepare.outputs.target_ref }}
-          PUBLISH: ${{ needs.prepare.outputs.publish }}
-          APP_VERSION: ${{ needs.prepare.outputs.version }}
+          GLOBAL_CLIENT_CRT: ${{ secrets.GLOBAL_CLIENT_CRT }}
+          GLOBAL_CLIENT_KEY: ${{ secrets.GLOBAL_CLIENT_KEY }}
         run: |
           set -euo pipefail
-          # One tarball per binary: <name>-<version>-linux.tar.gz (test builds
-          # use the short SHA instead of a version).
-          if [ "$PUBLISH" = "true" ]; then
-            TAG="$APP_VERSION"
-          else
-            TAG="$REF_SLUG"
-          fi
-          # Only the three shipped artifacts make it into assets: ztna-cli
-          # (the `ztna` binary), ztna-admincheck, and ztna-linux (GUI).
-          # Workspace siblings such as ztna-mitm or ztna-api's apigen/inspect
-          # are not released.
-          mapfile -t BUILT < <(jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable' cargo-build-musl.json cargo-build-gui.json | sort -u)
-          EXES=()
-          for exe in "${BUILT[@]}"; do
-            case "$(basename "$exe")" in
-              ztna|ztna-admincheck|ztna-linux) EXES+=("$exe") ;;
-            esac
-          done
-          [ "${#EXES[@]}" -eq 3 ] || {
-            echo "::error::expected the 3 release binaries (ztna, ztna-admincheck, ztna-linux), got ${#EXES[@]}"
+          [ -n "${GLOBAL_CLIENT_CRT:-}" ] && [ -n "${GLOBAL_CLIENT_KEY:-}" ] || {
+            echo "::error::set the GLOBAL_CLIENT_CRT and GLOBAL_CLIENT_KEY repository secrets"
             exit 1
           }
-          ASSETS=""
-          for exe in "${EXES[@]}"; do
-            name="$(basename "$exe")"
-            # Ship the CLI under its crate name; the binary stays `ztna`.
-            case "$name" in
-              ztna) name="ztna-cli" ;;
-            esac
-            dir="${name}-${TAG}-linux"
-            mkdir -p "$dir"
-            cp "$exe" "$dir/" || exit 1
-            tar -czf "${dir}.tar.gz" "$dir"
-            rm -rf "$dir"
-            ASSETS+="${dir}.tar.gz"$'\n'
-          done
-          ls -lh ./*.tar.gz
-          echo "ASSETS<<EOF" >> "$GITHUB_ENV"
-          printf '%s' "$ASSETS" >> "$GITHUB_ENV"
-          echo "EOF" >> "$GITHUB_ENV"
+          umask 077
+          mkdir -p .certs
+          printf '%s\n' "$GLOBAL_CLIENT_CRT" > .certs/global_client.crt
+          printf '%s\n' "$GLOBAL_CLIENT_KEY" > .certs/global_client.key
 
-      - name: Upload test-build artifacts
-        if: needs.prepare.outputs.publish != 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: build-artifacts-${{ needs.prepare.outputs.target_ref }}
-          path: ${{ env.ASSETS }}
-          if-no-files-found: error
-
-      - name: Create GitHub Release on Vessel9457
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - name: Update Cargo.toml workspace version
         if: needs.prepare.outputs.publish == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: v${{ needs.prepare.outputs.version }}
-          TARGET_REF: ${{ needs.prepare.outputs.target_ref }}
-          ASSETS: ${{ env.ASSETS }}
+        run: just version set "${{ needs.prepare.outputs.version }}"
+
+      - name: Install clang + mold + GTK4/Adwaita libs
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends clang mold libgtk-4-dev libadwaita-1-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: x86_64-unknown-linux-gnu
+
+      - name: Build GUI (glibc)
         run: |
           set -euo pipefail
-          # The workspace's `origin` points at Forgejo, so `gh` cannot infer the
-          # repository — pass it explicitly.
-          mapfile -t ASSET_LIST <<< "${ASSETS%$'\n'}"
-          [ "${#ASSET_LIST[@]}" -gt 0 ] || { echo "::error::no assets packaged"; exit 1; }
-          gh release create "$VERSION" "${ASSET_LIST[@]}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --title "$VERSION" \
-            --notes "To be disclosed"
+          cargo build -p ztna-app --release
+
+      - name: Package ztna-app
+        uses: Delnegend/actions/package-artifact@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
+        with:
+          name: ztna-app
+          version: ${{ needs.prepare.outputs.version }}
+          target: x86_64-unknown-linux-gnu
+          source: target/release/ztna-app
+
+  publish:
+    name: Publish Consolidated Release
+    needs: [prepare, build-musl, build-gui]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release
+        uses: Delnegend/actions/publish-release@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
+        with:
+          ref: ${{ needs.prepare.outputs.target_ref }}
+          publish: ${{ needs.prepare.outputs.publish }}
