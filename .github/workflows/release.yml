@@ -1,10 +1,10 @@
 # Release for the private Forgejo repo `Delnegend/ztna-agent`.
 #
 # Three targets, dispatched by the Forgejo `release` workflow:
-#   new-tag (default) — dispatched with the new `vX.Y.Z` tag; builds the tag
+#   new-tag (default): dispatched with the new `vX.Y.Z` tag; builds the tag
 #     and publishes artifacts.
-#   tag    — rebuild an existing tag (repair path); builds and publishes.
-#   commit — test-build a commit SHA; artifacts go to the Actions run only,
+#   tag   : rebuild an existing tag (repair path); builds and publishes.
+#   commit: test-build a commit SHA; artifacts go to the Actions run only,
 #     no GitHub Release.
 # Artifacts (ztna-cli, ztna-admincheck, ztna-app) publish to GitHub Releases.
 # The Forgejo action mirrors the binary release back to Forgejo.
@@ -91,7 +91,7 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "::error::release v${VERSION} already exists on ${GITHUB_REPOSITORY} — delete it first (gh release delete v${VERSION} --repo ${GITHUB_REPOSITORY} --yes), then re-run"
+            echo "::error::release v${VERSION} already exists on ${GITHUB_REPOSITORY}; delete it first (gh release delete v${VERSION} --repo ${GITHUB_REPOSITORY} --yes), then re-run"
             exit 1
           fi
           echo "no existing release v${VERSION}; proceeding"
