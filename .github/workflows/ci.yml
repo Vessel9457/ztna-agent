@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Fetch source from Forgejo
-        uses: Delnegend/actions/twin-checkout@cc01ad7470776ce23b38f14823a86d560e2d592e # v1
+        uses: Delnegend/actions/twin-checkout@main
         with:
           token: ${{ secrets.FORGEJO }}
           ref: ${{ inputs.ref || 'main' }}
@@ -89,7 +89,7 @@ jobs:
 
   scan:
     name: Scan
-    uses: Delnegend/actions/.github/workflows/scan.yml@cc01ad7470776ce23b38f14823a86d560e2d592e # v1
+    uses: Delnegend/actions/.github/workflows/scan.yml@main
     with:
       ref: ${{ inputs.ref || 'main' }}
       forgejo: true

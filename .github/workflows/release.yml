@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Fetch source from Forgejo
-        uses: Delnegend/actions/twin-checkout@cc01ad7470776ce23b38f14823a86d560e2d592e # v1
+        uses: Delnegend/actions/twin-checkout@main
         with:
           token: ${{ secrets.FORGEJO }}
           ref: ${{ needs.prepare.outputs.target_ref }}
@@ -161,7 +161,7 @@ jobs:
           cargo build -p ztna-cli -p ztna-admincheck --release --target x86_64-unknown-linux-musl
 
       - name: Package ztna-cli
-        uses: Delnegend/actions/package-artifact@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
+        uses: Delnegend/actions/package-artifact@main
         with:
           name: ztna-cli
           version: ${{ needs.prepare.outputs.version }}
@@ -169,7 +169,7 @@ jobs:
           source: target/x86_64-unknown-linux-musl/release/ztna
 
       - name: Package ztna-admincheck
-        uses: Delnegend/actions/package-artifact@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
+        uses: Delnegend/actions/package-artifact@main
         with:
           name: ztna-admincheck
           version: ${{ needs.prepare.outputs.version }}
@@ -182,7 +182,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Fetch source from Forgejo
-        uses: Delnegend/actions/twin-checkout@cc01ad7470776ce23b38f14823a86d560e2d592e # v1
+        uses: Delnegend/actions/twin-checkout@main
         with:
           token: ${{ secrets.FORGEJO }}
           ref: ${{ needs.prepare.outputs.target_ref }}
@@ -230,7 +230,7 @@ jobs:
           cargo build -p ztna-app --release
 
       - name: Package ztna-app
-        uses: Delnegend/actions/package-artifact@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
+        uses: Delnegend/actions/package-artifact@main
         with:
           name: ztna-app
           version: ${{ needs.prepare.outputs.version }}
@@ -246,7 +246,7 @@ jobs:
       contents: write
     steps:
       - name: Publish release
-        uses: Delnegend/actions/publish-release@2ca01b1399d9614cec1b87f14b75790e6011f0fa # v1
+        uses: Delnegend/actions/publish-release@main
         with:
           ref: ${{ needs.prepare.outputs.target_ref }}
           publish: ${{ needs.prepare.outputs.publish }}
